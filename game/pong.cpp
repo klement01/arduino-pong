@@ -56,7 +56,7 @@ public:
         }
 
         // Paddle initialization.
-        float horizontalOffset = 16.0f;
+        float horizontalOffset = 24.0f;
         left = Board::Paddle{
             this,
             horizontalOffset,
@@ -80,8 +80,8 @@ public:
 
         // Renders the background.
         int        borderWidth = 4;
-        olc::Pixel borderColor = olc::DARK_GREY;
-        olc::Pixel bgColor     = olc::VERY_DARK_BLUE;
+        olc::Pixel borderColor = Board::BORDER_COLOR;
+        olc::Pixel bgColor     = Board::BACKGROUND_COLOR;
 
         int bgLayer = CreateLayer();
         SetDrawTarget(bgLayer);

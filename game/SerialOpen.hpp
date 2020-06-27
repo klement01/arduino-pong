@@ -10,8 +10,8 @@
 
 */
 
-#ifndef _SERIAL_INIT_BLOCK
-#define _SERIAL_INIT_BLOCK
+#ifndef _SERIAL_OPEN_BLOCK
+#define _SERIAL_OPEN_BLOCK
 
 #include <stdio.h>
 #include <string.h>
