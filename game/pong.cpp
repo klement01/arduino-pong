@@ -142,7 +142,7 @@ int main()
 {
     // Initializes the game window.
     Pong game;
-    int  state = game.Construct(640,480,1,1);
+    int  state = game.Construct(1080,720,1,1);
     if(state)
     {
         game.Start();

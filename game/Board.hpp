@@ -15,8 +15,9 @@
 namespace Board
 {
 
-const olc::Pixel BORDER_COLOR     = olc::DARK_GREY;
-const olc::Pixel BACKGROUND_COLOR = olc::VERY_DARK_BLUE;
+const olc::Pixel BORDER_COLOR      = olc::DARK_GREY;
+const olc::Pixel BACKGROUND_COLOR  = olc::VERY_DARK_BLUE;
+const olc::Pixel PLAY_OBJECT_COLOR = olc::GREY;
 
 class Rectangle
 {
@@ -27,7 +28,7 @@ public:
     olc::vf2d  pos;
     float      speed;
     olc::vi2d  size;
-    olc::Pixel color = olc::GREY;
+    olc::Pixel color = PLAY_OBJECT_COLOR;
 
     // Used to determine collisions.
     enum  Corners {TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT};
@@ -48,15 +49,13 @@ public:
     Paddle() = default;
     Paddle(olc::PixelGameEngine*, float, bool*, bool*);
 
+    int  score = 0;
+
 private:
     bool *upButton, *downButton;
-    int  score = 0;
 
 public:
     void Update(float);
-
-    int  IncrementScore() { score++; return score; }
-    void ResetScore()     { score=0;}
 };
 
 class Ball : public Rectangle
@@ -67,6 +66,7 @@ public:
 
 private:
     olc::vf2d startingPos;
+    float     startingSpeed, speedDelta;
     olc::vf2d velocity;
     bool*     serveButton;
     int       maxScore;
@@ -87,6 +87,8 @@ public:
     void AddPaddle(Paddle& p) { paddles.push_back(p); }
 
 private:
+    void reset() { pos = startingPos; speed = startingSpeed; }
+
     void BounceOn(Paddle&);
 
     void DrawScore();

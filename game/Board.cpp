@@ -1,3 +1,5 @@
+#include <string>
+
 #include "Board.hpp"
 
 using namespace Board;
@@ -57,13 +59,17 @@ Rectangle::Edges Rectangle::KeepInbound()
     return oobValue;
 }
 
+/* ------------------------------------------------------
+------------------- Paddle functions. -------------------
+------------------------------------------------------ */
+
 Paddle::Paddle(olc::PixelGameEngine* _game, float _pos_x, bool* _downButton, bool* _upButton)
 {
     game = _game;
 
     // Initial conditions.
-    speed = 300;
-    size  = olc::vi2d{10,50};
+    speed = 400;
+    size  = olc::vi2d{20,120};
     score = 0;
 
     // Sets and shifts position to account for width and height.
@@ -90,13 +96,19 @@ void Paddle::Update(float fElapsedTime)
     Draw();
 }
 
+/* ------------------------------------------------------
+-------------------- Ball functions. --------------------
+------------------------------------------------------ */
+
 Ball::Ball(olc::PixelGameEngine* _game, bool* _serveButton)
 {
     game = _game;
 
     // Initial conditions.
-    speed = 300;
-    size  = olc::vi2d{10,10};
+    startingSpeed = speed = 400;
+    speedDelta    = 15;
+
+    size = olc::vi2d{20,20};
 
     maxScore  = 5;
     nextServe = P_LEFT;
@@ -123,16 +135,23 @@ void Ball::Update(float fElapsedTime)
     if (state == SERVE)
     {
         DrawServeMessage();
-        pos = startingPos;
+        reset();
         if (!*serveButton)
             pressing = false;
         else if (*serveButton && !pressing)
         {            
             state = PLAY;
-            if (nextServe == P_LEFT)
-                velocity = olc::vf2d{+speed, 0.0f};
-            else if (nextServe == P_RIGHT)
-                velocity = olc::vf2d{-speed, 0.0f};
+
+            // Generates random starting velocity, between -45° and 45°.
+            int randX = 1 + rand() % 100;
+            velocity    = olc::vf2d{
+                static_cast<float>(randX),
+                static_cast<float>(1 + rand() % randX)
+            };
+            velocity.y *= rand() % 2 == 1 ? 1.0f : -1.0f;
+            velocity    = speed * velocity.norm();
+            if (nextServe == P_RIGHT)
+                velocity.x *= -1;
         }
     }
 
@@ -141,7 +160,6 @@ void Ball::Update(float fElapsedTime)
     {
         pos += velocity * fElapsedTime;
         Edges oobEdge = KeepInbound();
-        int newScore;
         switch (oobEdge)
         {
         // Ball was not out of bounds:
@@ -155,6 +173,7 @@ void Ball::Update(float fElapsedTime)
                 if (this->CollidingWith(i))
                 {
                     this->BounceOn(i);
+                    speed += speedDelta;
                     break;
                 }
             }
@@ -168,8 +187,8 @@ void Ball::Update(float fElapsedTime)
         case LEFT:
             nextServe = P_LEFT;
             winner    = P_RIGHT;
-            newScore  = paddles[P_RIGHT].IncrementScore();
-            if (newScore >= maxScore)
+            paddles[P_RIGHT].score++;
+            if (paddles[P_RIGHT].score >= maxScore)
                 state = WIN;
             else
                 state = SERVE;
@@ -177,8 +196,8 @@ void Ball::Update(float fElapsedTime)
         case RIGHT:
             nextServe = P_RIGHT;
             winner    = P_LEFT;
-            newScore  = paddles[P_LEFT].IncrementScore();
-            if (newScore >= maxScore)
+            paddles[P_LEFT].score++;
+            if (paddles[P_LEFT].score >= maxScore)
                 state = WIN;
             else
                 state = SERVE;
@@ -190,12 +209,12 @@ void Ball::Update(float fElapsedTime)
     else if (state == WIN)
     {
         DrawWinMessage();
-        pos = startingPos;
+        reset();
         if (*serveButton)
         {
             for (auto& i : paddles)
             {
-                i.ResetScore();
+                i.score = 0;
             }
             pressing = true;
             state = SERVE;
@@ -231,52 +250,104 @@ void Ball::BounceOn(Paddle& p)
     // If the ball collides on the sides of the paddle:
     else
     {
-        // Maximum push the paddle can give to the ball, in degrees.
-        float maxAngle = 60;
+        /* How much the paddle can push the ball and how angled
+        the ball can leave after bouncing on the paddle */
+        float maxPushAngle  = 60 * (3.14f/180.0f); // Radians.
 
         /* Angle the paddle will push the ball
         based on where it hit it, in radians. */
         float pushAngle =
-            maxAngle
-            // Conversion from degrees to radians.
-            * (3.14f/180.0f)
+            maxPushAngle
             // Signed distance between center of paddle and ball (x2).
-            * (this->edges[TOP] - p.edges[TOP] + this->edges[BOTTOM] - p.edges[BOTTOM])
+            * (this->edges[TOP] + this->edges[BOTTOM] - p.edges[TOP] - p.edges[BOTTOM])
             // Max distance between centers (x2).
             / static_cast<float>(this->size.y + p.size.y);
 
-        // Unit vector representing the push.
-        olc::vf2d pushVector = {
-            static_cast<float>(cos(pushAngle)),
-            static_cast<float>(sin(pushAngle))
+        // New velocity.
+        this->velocity = olc::vf2d{
+            this->speed * static_cast<float>(cos(pushAngle)),
+            this->speed * static_cast<float>(sin(pushAngle))
         };
 
         // Left side of the ball collides with right side of the paddle.
         if (contained[TOP_LEFT] || contained[BOTTOM_LEFT])
+        {
             this->pos.x = p.edges[RIGHT];
+        }
         // Right side of the ball collides with left side of the paddle.
         else
+        {
             this->pos.x = p.edges[LEFT] - static_cast<float>(this->size.x);
-            pushVector.x *= -1;
-
-        // Calculates new velocity vector from old velocity and push.
-        this->velocity.x *= -1;
-        this->velocity    = this->velocity.norm() + pushVector;
-        this->velocity    = this->velocity.norm() * this->speed;
+            this->velocity.x *= -1;
+        }
     }
+}
+
+/* ------------------------------------------------------
+--------------- String drawing functions. ---------------
+------------------------------------------------------ */
+
+void DrawCenteredString
+(
+    olc::PixelGameEngine* game,
+    float xOffset,
+    float yOffset,
+    std::string& s,
+    olc::Pixel color,
+    uint32_t scale
+)
+{
+    /* Constants to decide how text should be shifted
+    per character in order to center it. */
+    float STR_Y_MULTIPLIER = 3.5;
+    float STR_X_MULTIPLIER = 7.67;
+
+    uint32_t x = static_cast<uint32_t>(
+        static_cast<float>(game->ScreenWidth()) / 2
+        - STR_X_MULTIPLIER * scale * static_cast<float>(s.length()) / 2
+        + xOffset
+    );
+    uint32_t y = static_cast<uint32_t>(
+        static_cast<float>(game->ScreenHeight()) / 2
+        - STR_Y_MULTIPLIER * scale
+        + yOffset
+    );
+    game->DrawString(x, y, s, color, scale);
 }
 
 void Ball::DrawScore()
 {
+    std::ostringstream stream;
+    stream << paddles[P_LEFT].score << "\t" << paddles[P_RIGHT].score;
+    std::string mes = stream.str();
 
+    DrawCenteredString(game, 0, 0, mes, Board::BORDER_COLOR, 20);
 }
 
 void Ball::DrawServeMessage()
 {
+    std::ostringstream stream;
+    stream << "Player ";
+    if (nextServe == P_LEFT)
+        stream << "1";
+    if (nextServe == P_RIGHT)
+        stream << "2";
+    stream << ", it's your turn to serve!";
+    std::string mes = stream.str();
 
+    DrawCenteredString(game, 0, -200, mes, Board::BORDER_COLOR, 3);
 }
 
 void Ball::DrawWinMessage()
 {
+    std::ostringstream stream;
+    stream << "Congratulations Player ";
+    if (winner == P_LEFT)
+        stream << "1";
+    if (winner == P_RIGHT)
+        stream << "2";
+    stream << ", you've won!";
+    std::string mes = stream.str();
 
+    DrawCenteredString(game, 0, -200, mes, Board::BORDER_COLOR, 3);
 }
